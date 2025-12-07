@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Inferometer — Measure inference latency & responses</title>
+  <meta name="description" content="A lightweight single-file Inferometer web app — measure API inference latency, visualize results, and run local mock inferences. Deployable to Netlify as a static site." />
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--muted:#94a3b8;--accent:#7c3aed;--glass:rgba(255,255,255,0.03)}
+    *{box-sizing:border-box}
+    body{font-family:Inter,Segoe UI,Roboto,system-ui,Arial;background:linear-gradient(180deg,#071026 0%,#041026 100%);color:#e6eef8;margin:0;padding:24px;min-height:100vh}
+    .container{max-width:980px;margin:0 auto}
+    header{display:flex;align-items:center;gap:16px;margin-bottom:18px}
+    header h1{font-size:20px;margin:0}
+    .grid{display:grid;grid-template-columns:1fr 360px;gap:18px}
+    .card{background:var(--card);padding:16px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+    label{display:block;color:var(--muted);font-size:13px;margin-bottom:8px}
+    input[type=text],textarea,select{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:var(--glass);color:inherit}
+    textarea{min-height:90px;resize:vertical}
+    .row{display:flex;gap:10px}
+    button{background:var(--accent);border:none;color:white;padding:10px 14px;border-radius:8px;cursor:pointer}
+    button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06)}
+    .metrics{display:flex;gap:12px;margin-top:12px}
+    .metric{background:rgba(255,255,255,0.02);padding:8px;border-radius:8px;flex:1;text-align:center}
+    .small{font-size:12px;color:var(--muted)}
+    pre{background:rgba(0,0,0,0.25);padding:12px;border-radius:8px;overflow:auto;max-height:260px}
+    canvas{width:100%;height:160px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-radius:8px}
+    footer{margin-top:18px;color:var(--muted);font-size:13px}
+    .hint{font-size:13px;color:var(--muted);margin-top:8px}
+    .badge{display:inline-block;background:rgba(255,255,255,0.03);padding:6px 8px;border-radius:999px;font-size:12px}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Inferometer</h1>
+        <div class="small">Measure inference latency & visualize API responses.</div>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div>
+        <div class="card">
+          <label>Model / Endpoint URL</label>
+          <input id="endpoint" type="text" placeholder="https://api.example.com/v1/predict (leave blank to use local mock)" />
+
+          <div style="display:flex;gap:10px;margin-top:10px;align-items:center">
+            <div style="flex:1">
+              <label>HTTP Method</label>
+              <select id="method"><option>POST</option><option>GET</option></select>
+            </div>
+            <div style="width:160px">
+              <label>Content type</label>
+              <select id="contentType"><option value="application/json">application/json</option><option value="multipart/form-data">multipart/form-data</option></select>
+            </div>
+          </div>
+
+          <label style="margin-top:12px">Request body (JSON) — example input</label>
+          <textarea id="payload">{"input":"The quick brown fox"}</textarea>
+
+          <div class="hint">Tip: leave endpoint empty to run a local mock inference that demonstrates latency and output format.</div>
+
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button id="run">Run Inference</button>
+            <button id="clear" class="secondary">Clear Results</button>
+            <button id="addSample" class="secondary">Insert Sample Image Request</button>
+          </div>
+
+          <div class="metrics">
+            <div class="metric">
+              <div class="small">Last latency</div>
+              <div id="lastLatency">— ms</div>
+            </div>
+            <div class="metric">
+              <div class="small">Average latency</div>
+              <div id="avgLatency">— ms</div>
+            </div>
+            <div class="metric">
+              <div class="small">Calls</div>
+              <div id="count">0</div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px">
+            <label>Response</label>
+            <pre id="response">No results yet.</pre>
+          </div>
+
+        </div>
+
+        
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <label>Configuration & Headers</label>
+          <div style="margin-bottom:8px">
+            <label class="small">Custom headers (JSON)</label>
+            <textarea id="headers">{"Authorization":"Bearer YOUR_KEY"}</textarea>
+          </div>
+
+          <div style="margin-top:8px">
+            <label class="small">Advanced</label>
+            <div class="controls">
+              <div class="badge">Timeout: <input id="timeout" type="number" value="10000" style="width:80px;margin-left:8px;padding:6px;border-radius:6px;background:transparent;border:none;color:inherit"/></div>
+              <div class="badge">Repeat: <input id="repeat" type="number" value="1" style="width:60px;margin-left:8px;padding:6px;border-radius:6px;background:transparent;border:none;color:inherit"/></div>
+              <div class="badge">Delay(ms): <input id="delay" type="number" value="200" style="width:80px;margin-left:8px;padding:6px;border-radius:6px;background:transparent;border:none;color:inherit"/></div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px">
+            <label class="small">Notes</label>
+            <div class="small">This is a static client app. To measure a real model hosted behind an API, provide a reachable endpoint and a valid Authorization header if required.</div>
+          </div>
+        </div>
+
+        
+
+      </div>
+    </div>
+
+    <footer>
+      <div class="small">Inferometer • Single-file static app • Works offline with mock mode • Modify request/headers to test real endpoints.</div>
+      <div class="small" style="margin-top:6px">By <a href="https://github.com/ekasnh" target="_blank" style="color:#7c3aed">Ekansh Agarwal</a> • Follow the repository: <a href="https://github.com/ekasnh/Inferometer" target="_blank" style="color:#7c3aed">github.com/ekasnh/Inferometer</a></div>
+    </footer>
+  </div>
+
+  <script>
+    // Simple latency collector + chart using canvas
+    const endpointEl = document.getElementById('endpoint');
+    const payloadEl = document.getElementById('payload');
+    const runBtn = document.getElementById('run');
+    const responseEl = document.getElementById('response');
+    const lastLatencyEl = document.getElementById('lastLatency');
+    const avgLatencyEl = document.getElementById('avgLatency');
+    const countEl = document.getElementById('count');
+    const headersEl = document.getElementById('headers');
+    const methodEl = document.getElementById('method');
+    const timeoutEl = document.getElementById('timeout');
+    const repeatEl = document.getElementById('repeat');
+    const delayEl = document.getElementById('delay');
+    const contentTypeEl = document.getElementById('contentType');
+    const clearBtn = document.getElementById('clear');
+    const addSampleBtn = document.getElementById('addSample');
+
+    let latencies = [];
+    let total = 0;
+
+    runBtn.addEventListener('click', async () => {
+      const endpoint = endpointEl.value.trim();
+      const method = methodEl.value || 'POST';
+      const contentType = contentTypeEl.value;
+      const headers = safeJsonParse(headersEl.value) || {};
+      const bodyText = payloadEl.value;
+      const repeat = Math.max(1, parseInt(repeatEl.value||1));
+      const delay = Math.max(0, parseInt(delayEl.value||0));
+      const to = Math.max(1000, parseInt(timeoutEl.value||10000));
+
+      for (let i=0;i<repeat;i++){
+        try {
+          const start = performance.now();
+          let res;
+          if(!endpoint){
+            // local mock
+            res = await mockInference(bodyText);
+          } else {
+            const controller = new AbortController();
+            const id = setTimeout(()=>controller.abort(), to);
+            const options = {method,headers: {...headers,'Content-Type':contentType},signal:controller.signal};
+            if(method!=='GET'){
+              if(contentType==='application/json') options.body = bodyText;
+              else options.body = bodyText; // keep simple; user can paste form-data manually
+            }
+            const fetchRes = await fetch(endpoint,options);
+            clearTimeout(id);
+            const text = await fetchRes.text();
+            try{ res = JSON.parse(text);}catch(e){ res = {status: fetchRes.status, body: text} }
+          }
+          const end = performance.now();
+          const ms = Math.round(end - start);
+          record(ms,res);
+        } catch(err){
+          const end = performance.now();
+          const ms = Math.round(end - (window._inferStart||end));
+          record(ms,{error: String(err)});
+        }
+        if(i<repeat-1) await sleep(delay);
+      }
+    });
+
+    function record(ms,res){
+      latencies.push(ms);
+      if(latencies.length>30) latencies.shift();
+      total += ms;
+      const avg = Math.round((total / (parseInt(countEl.textContent||0) + 1)));
+      lastLatencyEl.textContent = ms + ' ms';
+      const counts = parseInt(countEl.textContent||0)+1;
+      countEl.textContent = counts;
+      // compute average properly
+      const sum = latencies.reduce((a,b)=>a+b,0);
+      avgLatencyEl.textContent = Math.round(sum/latencies.length) + ' ms';
+      responseEl.textContent = typeof res === 'object' ? JSON.stringify(res,null,2) : String(res);
+      drawChart();
+    }
+
+    function drawChart(){
+      const canvas = document.getElementById('latencyChart');
+      const ctx = canvas.getContext('2d');
+      // pixel ratio
+      const DPR = window.devicePixelRatio || 1;
+      canvas.width = canvas.clientWidth * DPR;
+      canvas.height = canvas.clientHeight * DPR;
+      ctx.scale(DPR,DPR);
+      const w = canvas.clientWidth; const h = canvas.clientHeight;
+      ctx.clearRect(0,0,w,h);
+      ctx.fillStyle = 'rgba(255,255,255,0.02)';
+      ctx.fillRect(0,0,w,h);
+      if(latencies.length===0) return;
+      const max = Math.max(...latencies)*1.1;
+      const stepX = w / Math.max(1,latencies.length-1);
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(124,58,237,0.95)';
+      ctx.lineWidth = 2;
+      for(let i=0;i<latencies.length;i++){
+        const x = i*stepX;
+        const y = h - (latencies[i]/max) * (h - 12) - 6;
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        // dot
+        ctx.fillStyle = 'rgba(124,58,237,0.95)';
+        ctx.beginPath(); ctx.arc(x,y,2.5,0,Math.PI*2); ctx.fill();
+      }
+      ctx.stroke();
+    }
+
+    function safeJsonParse(s){ try{ return s?JSON.parse(s):{} }catch(e){ return null } }
+    function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+    async function mockInference(body){
+      // simulate variable latency and produce a mock JSON response
+      const jitter = Math.round(Math.random()*220) + 80; // 80-300ms
+      await sleep(jitter);
+      let parsed = null; try{ parsed = JSON.parse(body) }catch(e){ parsed = {raw: String(body)} }
+      return {model: 'mock-model-v0', input: parsed, output: summarize(parsed), latency_simulated: jitter};
+    }
+
+    function summarize(parsed){
+      // simple mock summarizer
+      if(!parsed) return 'no-input';
+      const text = parsed.input || parsed.text || JSON.stringify(parsed).slice(0,120);
+      return text.toString().slice(0,120) + (text.length>120? '...' : '');
+    }
+
+    clearBtn.addEventListener('click', ()=>{
+      latencies = []; total = 0; countEl.textContent = '0'; lastLatencyEl.textContent='— ms'; avgLatencyEl.textContent='— ms'; responseEl.textContent='No results yet.'; drawChart();
+    })
+
+    addSampleBtn.addEventListener('click', ()=>{
+      payloadEl.value = JSON.stringify({image_url: 'https://example.com/image.jpg', task: 'classify'}, null, 2);
+      contentTypeEl.value = 'application/json';
+    })
+
+    // initial draw
+    drawChart();
+  </script>
+</body>
+</html>
